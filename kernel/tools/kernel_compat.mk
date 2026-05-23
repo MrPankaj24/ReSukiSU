@@ -273,3 +273,8 @@ ifeq ($(shell grep -F -q "char *lsm_names" $(srctree)/security/security.c; echo 
 $(info -- $(REPO_NAME)/compat: found required provide lsm name)
 ccflags-y += -DKSU_COMPAT_REQUIRE_PROVIDE_LSM_NAME
 endif
+
+ifeq ($(shell grep -q "struct selinux_policy" $(srctree)/security/selinux/ss/services.h; echo $$?),0)
+$(info -- $(REPO_NAME)/compat: found selinux_policy struct)
+ccflags-y += -DKSU_COMPAT_HAS_SELINUX_POLICY_STRUCT
+endif
