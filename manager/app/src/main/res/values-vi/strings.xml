@@ -350,6 +350,12 @@
     <string name="susfs_no_features_found">Không tìm thấy thông tin trạng thái tính năng</string>
     <string name="susfs_feature_enabled">Đã bật</string>
     <string name="susfs_feature_disabled">Đã tắt</string>
+    <string name="sus_path_feature_label">Hỗ trợ Đường dẫn SuS</string>
+    <string name="sus_kstat_feature_label">Hỗ trợ SuS Kstat</string>
+    <string name="spoof_uname_feature_label">Hỗ trợ giả mạo Uname</string>
+    <string name="spoof_cmdline_feature_label">Giả mạo Cmdline/Bootconfig</string>
+    <string name="open_redirect_feature_label">Mở hỗ trợ chuyển hướng</string>
+    <string name="sus_map_feature_label">Hỗ trợ SuS Map</string>
     <string name="susfs_feature_configurable">Nhấn để bật/tắt ghi nhật ký</string>
     <string name="susfs_enable_log_label">Kích hoạt nhật ký SuSFS</string>
     <string name="susfs_log_config_description">Bật hoặc tắt ghi nhật ký cho SuSFS</string>
@@ -478,17 +484,16 @@
     <string name="susfs_reset_loop_paths_title">Đặt lại Đường dẫn Vòng lặp SuS</string>
     <string name="susfs_reset_loop_paths_message">Bạn có chắc chắn muốn xóa tất cả các Đường dẫn Vòng lặp SuS không? Thao tác này không thể hoàn tác</string>
     <string name="susfs_loop_path_label">Đường dẫn Vòng lặp</string>
-    <string name="susfs_loop_path_restriction_warning">Lưu ý: Chỉ những đường dẫn KHÔNG nằm trong /storage/ và /sdcard/ mới có thể được thêm vào thông qua Đường dẫn Vòng lặp</string>
     <string name="susfs_loop_path_invalid_location">Lỗi: Đường dẫn Vòng lặp không thể nằm trong thư mục /storage/ hoặc /sdcard/</string>
     <string name="loop_paths_section">Đường dẫn Vòng lặp</string>
     <string name="add_loop_path">Thêm Đường dẫn Vòng lặp</string>
     <string name="sus_loop_paths_description_title">Cấu hình Đường dẫn Vòng lặp</string>
-    <string name="sus_loop_paths_description_text">Đường dẫn Vòng lặp được đổi tên thành SUS_PATH mỗi khi một ứng dụng không phải root hoặc dịch vụ cô lập được khởi động. Điều này giúp giải quyết vấn đề đường dẫn đã thêm có thể trở nên không hợp lệ do trạng thái inode được đặt lại hoặc inode được tạo lại trong Kernel</string>
+    <string name="sus_loop_paths_description_text">"Đường dẫn Vòng lặp được đổi tên thành SUS_PATH mỗi khi một ứng dụng không phải root hoặc dịch vụ cô lập được khởi động. Điều này giúp giải quyết vấn đề đường dẫn đã thêm có thể trở nên không hợp lệ do trạng thái inode được đặt lại hoặc inode được tạo lại trong Kernel"</string>
     <string name="avc_log_spoofing">Giả mạo nhật ký AVC</string>
     <string name="avc_log_spoofing_enabled">Giả mạo nhật ký AVC đã kích hoạt</string>
     <string name="avc_log_spoofing_disabled">Giả mạo nhật ký AVC đã bị vô hiệu hoá</string>
-    <string name="avc_log_spoofing_description">Tắt: Vô hiệu hoá tính năng giả mạo sus tcontext của \'su\' trong nhật ký AVC của kernel\n
-Bật: Kích hoạt tính năng giả mạo sus tcontext của \'su\' thành \'u:r:priv_app:s0:c512,c768\' trong nhật ký AVC của kernel</string>
+    <string name="avc_log_spoofing_description">"Tắt: Vô hiệu hoá tính năng giả mạo sus tcontext của 'su' trong nhật ký AVC của kernel\n
+Bật: Kích hoạt tính năng giả mạo sus tcontext của 'su' thành 'u:r:priv_app:s0:c512,c768' trong nhật ký AVC của kernel"</string>
     <string name="avc_log_spoofing_warning">Lưu ý quan trọng:\n
 - Giá trị này được đặt thành \'0\' theo mặc định trong kernel\n
 - Việc bật tính năng này đôi khi có thể khiến các nhà phát triển khó xác định nguyên nhân của các vấn đề về quyền hoặc SELinux khi gỡ lỗi, vì vậy người dùng nên tắt tính năng này khi gỡ lỗi</string>
