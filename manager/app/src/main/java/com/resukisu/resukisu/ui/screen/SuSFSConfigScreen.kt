@@ -30,6 +30,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Apps
 import androidx.compose.material.icons.filled.Backup
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Folder
@@ -238,10 +239,10 @@ private fun SuSFeaturesTab(
         LazyColumn(
             modifier = Modifier.weight(1f),
         ) {
-            item {
+            item(key = "spacer_top", contentType = "spacer") {
                 Spacer(modifier = Modifier.height(contentPadding.calculateTopPadding()))
             }
-            item {
+            item(key = "features_header", contentType = "segmented") {
                 SegmentedColumn(
                     title = stringResource(R.string.susfs_tab_enabled_features)
                 ) {
@@ -307,7 +308,7 @@ private fun SuSFeaturesTab(
                     }
                 }
             }
-            item {
+            item(key = "spacer_bottom", contentType = "spacer") {
                 Spacer(modifier = Modifier.height(contentPadding.calculateBottomPadding()))
             }
         }
@@ -468,10 +469,10 @@ private fun SuSMapTab(
             .fillMaxSize()
             .nestedScroll(nestedScrollConnection),
     ) {
-        item {
+        item(key = "spacer_top", contentType = "spacer") {
             Spacer(modifier = Modifier.height(contentPadding.calculateTopPadding()))
         }
-        item {
+        item(key = "sus_maps_header", contentType = "segmented") {
             SegmentedColumn(
                 title = stringResource(R.string.sus_maps_description_title)
             ) {
@@ -517,10 +518,10 @@ private fun SuSLoopPathTab(
             .fillMaxSize()
             .nestedScroll(nestedScrollConnection),
     ) {
-        item {
+        item(key = "spacer_top", contentType = "spacer") {
             Spacer(modifier = Modifier.height(contentPadding.calculateTopPadding()))
         }
-        item {
+        item(key = "sus_loop_paths_header", contentType = "segmented") {
             SegmentedColumn(
                 title = stringResource(R.string.sus_loop_paths_description_title)
             ) {
@@ -561,9 +562,17 @@ private fun SuSPathTab(
     val uiState = viewModel.uiState
     val pathEditDialog = rememberPathEditDialog(AddPathTarget.SusPath, viewModel)
 
-    var addAppDialog: DialogHandle? by remember { mutableStateOf(null) }
-
-    addAppDialog = rememberCustomDialog { dismiss ->
+    // Build the add-app dialog handle eagerly during composition. The previous
+    // implementation kept the handle in a `mutableStateOf(null)` and reassigned
+    // it during composition, which produced an extra recomposition every time
+    // the parent state changed. Now the handle is owned by the same `remember`
+    // slot as the dialog itself so it stays stable, and the captured
+    // `uiState.susPaths` (which the dialog uses to filter already-added
+    // packages) is observed lazily inside the dialog lambda. This also avoids
+    // a state-write-during-composition pattern that could interact with the
+    // delete recomposition path and crash the manager when the very last sus
+    // path was removed.
+    val addAppDialog = rememberCustomDialog { dismiss ->
         AddAppPathDialog(
             apps = appListSnapshot,
             existingSusPaths = uiState.susPaths,
@@ -585,24 +594,34 @@ private fun SuSPathTab(
         val others = mutableListOf<String>()
         val packageToLabel = uidToPackage.mapValues { it.value.label }
 
-        uiState.susPaths.forEach { path ->
+        // Compose keys derived from the path strings must be unique across the
+        // entire LazyColumn, so dedupe the input list before bucketising it.
+        // The viewmodel already filters duplicates that come from the JSON
+        // config, but a defensive `distinct()` here keeps the lazy list safe
+        // even if a future code path reintroduces a duplicate.
+        uiState.susPaths.distinct().forEach { path ->
             val pkg = appPathRegex.find(path)?.groupValues?.getOrNull(1)
 
             if (!pkg.isNullOrBlank()) {
-                appGroupsMap.getOrPut(pkg) { mutableListOf() } += path
+                val bucket = appGroupsMap.getOrPut(pkg) { mutableListOf() }
+                if (path !in bucket) bucket += path
             } else {
                 others += path
             }
         }
 
+        // Preserve the package name alongside the label/paths so the lazy
+        // list can build a stable, unique key per entry. Different installed
+        // apps occasionally resolve to the same display label, which would
+        // otherwise produce duplicate Compose keys and crash the manager
+        // when the user removed a path from one of them.
         val appSection = appGroupsMap.entries
             .map { entry ->
-                val label = packageToLabel[entry.key] ?: entry.key
-                label to entry.value.sorted()
+                Triple(entry.key, packageToLabel[entry.key] ?: entry.key, entry.value.distinct().sorted())
             }
-            .sortedBy { it.first.lowercase() }
+            .sortedBy { it.second.lowercase() }
 
-        appSection to others.sorted()
+        appSection to others.distinct().sorted()
     }
 
     val otherPath = stringResource(R.string.other_paths_section)
@@ -617,10 +636,17 @@ private fun SuSPathTab(
         LazyColumn(
             modifier = Modifier.weight(1f),
         ) {
-            item {
+            // Every top-level item gets an explicit string key and content
+            // type so the LazyColumn diff is stable when the optional
+            // app-groups section appears or disappears. Without these, the
+            // implicit positional keys of the trailing items shifted whenever
+            // the conditional `if (appGroups.isNotEmpty())` branch toggled,
+            // which crashed the manager during the recomposition triggered by
+            // removing the final sus path.
+            item(key = "spacer_top", contentType = "spacer") {
                 Spacer(modifier = Modifier.height(contentPadding.calculateTopPadding()))
             }
-            item {
+            item(key = "sus_path_actions", contentType = "segmented") {
                 SegmentedColumn(title = stringResource(R.string.susfs_tab_sus_paths)) {
                     item {
                         SettingsBaseWidget(
@@ -628,7 +654,7 @@ private fun SuSPathTab(
                             title = stringResource(R.string.add_app_path),
                             description = null,
                             onClick = {
-                                addAppDialog?.show()
+                                addAppDialog.show()
                             }
                         )
                     }
@@ -645,13 +671,13 @@ private fun SuSPathTab(
             if (appGroups.isNotEmpty()) {
                 lazySegmentedColumn(
                     appGroups,
-                    key = { _, (label, paths) -> "$label $paths" }) { _, (label, paths) ->
+                    key = { _, (pkg, label, paths) -> "$pkg:$label" }) { _, (pkg, label, paths) ->
                     SettingsBaseWidget(
                         icon = Icons.Filled.Apps,
                         title = label,
                         description = paths.joinToString("\n"),
                     ) {
-                        IconButton(onClick = { paths.forEach(viewModel::removeSusPath) }) {
+                        IconButton(onClick = { viewModel.removeSusPaths(paths) }) {
                             Icon(
                                 imageVector = Icons.Filled.Delete,
                                 contentDescription = stringResource(R.string.delete),
@@ -671,7 +697,7 @@ private fun SuSPathTab(
                 onDelete = viewModel::removeSusPath,
             )
 
-            item {
+            item(key = "spacer_bottom", contentType = "spacer") {
                 Spacer(modifier = Modifier.height(contentPadding.calculateBottomPadding()))
             }
         }
@@ -798,68 +824,64 @@ private fun BasicTab(
             }
 
             item {
-                SegmentedColumn(
-                    title = stringResource(R.string.susfs_tab_basic_settings)
-                ) {
-                    item {
-                        key(uiState.unameValue, uiState.buildTimeValue) {
-                            val state = rememberTextFieldState(initialText = uiState.unameValue)
+                val displayUname = viewModel.displayUnameValue
+                val displayBuildTime = viewModel.displayBuildTimeValue
 
+                // Re-create the text field state whenever the externally
+                // observed display value (which always falls back to the live
+                // kernel uname / build time so the field never shows the
+                // literal "default" placeholder) changes — that is, after a
+                // committed apply or reset.
+                key(displayUname, displayBuildTime) {
+                    val unameState = rememberTextFieldState(initialText = displayUname)
+                    val buildTimeState = rememberTextFieldState(initialText = displayBuildTime)
+
+                    SegmentedColumn(
+                        title = stringResource(R.string.susfs_tab_basic_settings)
+                    ) {
+                        item {
                             SettingsTextFieldWidget(
                                 icon = Icons.Filled.Edit,
                                 lineLimits = TextFieldLineLimits.SingleLine,
                                 title = stringResource(R.string.susfs_uname_label),
-                                state = state,
+                                state = unameState,
                                 onKeyboardAction = {
                                     keyboardController?.hide()
                                 }
                             )
-
-                            LaunchedEffect(state) {
-                                snapshotFlow { state.text }
-                                    .drop(1)
-                                    .collect { newText ->
-                                        viewModel.setUnameAndBuildTime(
-                                            newText.toString(),
-                                            uiState.buildTimeValue
-                                        )
-                                    }
-                            }
                         }
-                    }
-                    item {
-                        key(uiState.buildTimeValue, uiState.unameValue) {
-                            val state = rememberTextFieldState(initialText = uiState.buildTimeValue)
-
+                        item {
                             SettingsTextFieldWidget(
                                 icon = Icons.Filled.Edit,
                                 lineLimits = TextFieldLineLimits.SingleLine,
                                 title = stringResource(R.string.susfs_build_time_label),
-                                state = state,
+                                state = buildTimeState,
                                 onKeyboardAction = {
                                     keyboardController?.hide()
                                 }
                             )
-
-                            LaunchedEffect(state) {
-                                snapshotFlow { state.text }
-                                    .drop(1)
-                                    .collect { newText ->
-                                        viewModel.setUnameAndBuildTime(
-                                            uiState.unameValue,
-                                            newText.toString()
-                                        )
-                                    }
-                            }
                         }
-                    }
-                    item {
-                        SettingsBaseWidget(
-                            icon = Icons.Filled.Delete,
-                            title = stringResource(R.string.susfs_reset_to_default),
-                            description = null,
-                            onClick = { viewModel.setUnameAndBuildTime("", "") }
-                        )
+                        item {
+                            SettingsBaseWidget(
+                                icon = Icons.Filled.Check,
+                                title = stringResource(R.string.susfs_apply),
+                                description = null,
+                                onClick = {
+                                    viewModel.setUnameAndBuildTime(
+                                        unameState.text.toString(),
+                                        buildTimeState.text.toString(),
+                                    )
+                                }
+                            )
+                        }
+                        item {
+                            SettingsBaseWidget(
+                                icon = Icons.Filled.Delete,
+                                title = stringResource(R.string.susfs_reset_to_default),
+                                description = null,
+                                onClick = { viewModel.resetUnameAndBuildTime() }
+                            )
+                        }
                     }
                 }
             }
@@ -1180,12 +1202,30 @@ fun SuSFSConfigScreen() {
                     .fillMaxSize()
                     .blurSource(),
             ) {
+                if (viewModel.slotInfoLoading) {
+                    // Indicate that ksud is still reading the active boot
+                    // slot's kernel uname / build time. Reset cannot finish
+                    // until this loading completes, so surface the same kind
+                    // of progress indicator that the "Slot Info" sub-menu uses.
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(
+                                top = innerPadding.calculateTopPadding() + 8.dp,
+                                bottom = 8.dp,
+                            ),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        LoadingIndicator()
+                    }
+                }
+
                 if (uiState.loadError != null) {
                     WarningCard(
                         modifier = Modifier
                             .padding(horizontal = 16.dp)
                             .padding(
-                                top = innerPadding.calculateTopPadding() + 8.dp,
+                                top = if (viewModel.slotInfoLoading) 0.dp else innerPadding.calculateTopPadding() + 8.dp,
                                 bottom = 12.dp
                             ),
                         message = uiState.loadError,
@@ -1199,7 +1239,11 @@ fun SuSFSConfigScreen() {
                     verticalAlignment = Alignment.Top
                 ) { page ->
                     val tabPadding = PaddingValues(
-                        top = if (uiState.loadError != null) 0.dp else innerPadding.calculateTopPadding() + 5.dp,
+                        top = when {
+                            viewModel.slotInfoLoading -> 0.dp
+                            uiState.loadError != null -> 0.dp
+                            else -> innerPadding.calculateTopPadding() + 5.dp
+                        },
                         start = 0.dp,
                         end = 0.dp,
                         bottom = innerPadding.calculateBottomPadding() + 15.dp
@@ -1337,7 +1381,7 @@ private fun LazyListScope.staticKstatGroup(
                     onClick = { onEdit(entry) }
                 ) {
                     IconButton(
-                        onClick = { onDelete(entry) }
+                        onClick = { runCatching { onDelete(entry) }.onFailure { } }
                     ) {
                         Icon(
                             imageVector = Icons.Filled.Delete,

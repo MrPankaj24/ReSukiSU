@@ -44,7 +44,7 @@ pub fn set_hide_sus_mnts_for_non_su_procs(enabled: u8) {
     save_config(&config);
 }
 
-pub fn set_uname<S>(release: &S, version: &S)
+pub fn set_uname<S>(version: &S, release: &S)
 where
     S: ToString,
 {
@@ -186,15 +186,37 @@ where
     save_config(&config);
 }
 
-pub fn del_uname() {
+use anyhow::Result;
+
+pub fn del_uname_selective(target: &str) -> Result<()> {
     let Some(mut config) = read_config() else {
-        return;
+        return Ok(());
     };
 
-    config.common.version = "default".to_string();
-    config.common.release = "default".to_string();
+    match target {
+        "version" => {
+            // Reset only uname information
+            config.common.version = "default".to_string();
+        }
+        "release" => {
+            // Reset only build time information
+            config.common.release = "default".to_string();
+        }
+        "all" => {
+            // Reset both
+            config.common.version = "default".to_string();
+            config.common.release = "default".to_string();
+        }
+        _ => {
+            return Err(anyhow::anyhow!(
+                "invalid target '{}': expected 'version', 'release', or 'all'",
+                target
+            ));
+        }
+    }
 
     save_config(&config);
+    Ok(())
 }
 
 pub fn del_sus_path_loop<P>(path: P)

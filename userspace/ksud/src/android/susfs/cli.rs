@@ -91,11 +91,21 @@ pub enum SuSFSSubCommands {
         path: String,
     },
     /// Spoof uname for all processes, set string to 'default' to imply the function to use original string
+    /// Arguments:
+    ///   version  - The kernel uname/release information to spoof (e.g., "6.1.0-test")
+    ///   release  - The kernel build time information to spoof (e.g., "#1 SMP PREEMPT_DYNAMIC")
     #[command(name = "set_uname")]
-    SetUname { release: String, version: String },
-    /// Deleted Spoof uname for all processes, set string to 'default' to imply the function to use original string
+    SetUname { version: String, release: String },
+    /// Delete uname/build-time spoofing configuration
+    /// Arguments:
+    ///   version  - Reset only kernel uname information (stored in 'version' field)
+    ///   release  - Reset only kernel build time information (stored in 'release' field)
+    ///   all      - Reset both kernel uname and build time information
     #[command(name = "del_uname")]
-    DelUname,
+    DelUname {
+        #[arg(value_name = "TYPE")]
+        target: Option<String>,
+    },
     /// Enable/Disable susfs log in kernel
     #[command(name = "enable_log")]
     EnableLog {
@@ -198,8 +208,17 @@ pub enum SuSFSSubCommands {
         blksize: String,
     },
     /// Read boot slot kernel uname/build-time (auto-decompress kernel payload)
+    /// Can optionally specify a boot image path for direct analysis
     #[command(name = "slot_info")]
-    SlotInfo,
+    SlotInfo {
+        /// Optional path to a boot image file to analyze directly
+        /// If not specified, reads from /dev/block/by-name/boot_a, boot_b, or boot
+        #[arg(value_name = "BOOT_IMAGE", help = "Path to boot image file (optional)")]
+        boot_image: Option<String>,
+        /// Enable verbose debug logging
+        #[arg(short, long, help = "Enable verbose debug output")]
+        verbose: bool,
+    },
 }
 
 #[derive(Subcommand, Debug)]
@@ -257,9 +276,9 @@ pub fn run_main(command: SuSFSSubCommands) -> Result<()> {
             api::update_sus_kstat_full_clone(&path)?;
             config::operation::add_sus_kstat_full_clone(&path);
         }
-        SuSFSSubCommands::SetUname { release, version } => {
-            api::set_uname(&release, &version)?;
-            config::operation::set_uname(&release, &version);
+        SuSFSSubCommands::SetUname { version, release } => {
+            api::set_uname(&version, &release)?;
+            config::operation::set_uname(&version, &release);
         }
         SuSFSSubCommands::HideSusMntsForNonSuProcs { enabled } => {
             api::hide_sus_mnts_for_non_su_procs(enabled)?;
@@ -360,8 +379,35 @@ pub fn run_main(command: SuSFSSubCommands) -> Result<()> {
         SuSFSSubCommands::DelSusKstatFullClone { path } => {
             config::operation::del_sus_kstat_full_clone(&path);
         }
-        SuSFSSubCommands::DelUname => {
-            config::operation::del_uname();
+        SuSFSSubCommands::DelUname { target } => {
+            let target_str = target.as_deref().unwrap_or("");
+            match target_str {
+                "version" => {
+                    let release = config::read_config().unwrap_or_default().common.release;
+                    api::set_uname(&"default".to_string(), &release)?;
+                    config::operation::del_uname_selective("version")?;
+                }
+                "release" => {
+                    let version = config::read_config().unwrap_or_default().common.version;
+                    api::set_uname(&version, &"default".to_string())?;
+                    config::operation::del_uname_selective("release")?;
+                }
+                "all" => {
+                    api::set_uname(&"default".to_string(), &"default".to_string())?;
+                    config::operation::del_uname_selective("all")?;
+                }
+                "" => {
+                    return Err(anyhow::anyhow!(
+                        "del_uname requires an argument: version, release, or all"
+                    ));
+                }
+                _ => {
+                    return Err(anyhow::anyhow!(
+                        "invalid argument '{}': expected 'version', 'release', or 'all'",
+                        target_str
+                    ));
+                }
+            }
         }
         SuSFSSubCommands::DelSusMap { path } => {
             config::operation::del_sus_map(&path);
@@ -397,7 +443,13 @@ pub fn run_main(command: SuSFSSubCommands) -> Result<()> {
                 &blksize,
             );
         }
-        SuSFSSubCommands::SlotInfo => slot_info::show_slot_info_json()?,
+        SuSFSSubCommands::SlotInfo { boot_image, verbose } => {
+            if let Some(path) = boot_image {
+                slot_info::analyze_boot_image(&path, verbose)?;
+            } else {
+                slot_info::show_slot_info_json(verbose)?;
+            }
+        }
     }
 
     Ok(())
