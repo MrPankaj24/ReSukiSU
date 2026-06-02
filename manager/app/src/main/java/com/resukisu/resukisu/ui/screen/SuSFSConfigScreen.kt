@@ -91,6 +91,8 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.util.fastForEachIndexed
 import androidx.lifecycle.viewmodel.compose.viewModel
+import android.widget.Toast
+import com.topjohnwu.superuser.Shell
 import coil.compose.AsyncImage
 import coil.request.CachePolicy
 import coil.request.ImageRequest
@@ -230,6 +232,8 @@ private fun SuSFeaturesTab(
 ) {
     val uiState = viewModel.uiState
     val featureGroupTitle = stringResource(R.string.susfs_tab_enabled_features)
+    val isHardened = remember { Shell.cmd("zcat /proc/config.gz | grep CONFIG_KSU_SUSFS_HARDENED=y").exec().isSuccess }
+    val isUnicodeFiltered = remember { Shell.cmd("zcat /proc/config.gz | grep CONFIG_KSU_SUSFS_UNICODE_FILTER=y").exec().isSuccess }
 
     Column(
         modifier = Modifier
@@ -241,6 +245,23 @@ private fun SuSFeaturesTab(
         ) {
             item(key = "spacer_top", contentType = "spacer") {
                 Spacer(modifier = Modifier.height(contentPadding.calculateTopPadding()))
+            }
+            if (isHardened || isUnicodeFiltered) {
+                item(key = "ghost_kernel_status", contentType = "segmented") {
+                    SegmentedColumn(
+                        title = "Ghost Kernel Status"
+                    ) {
+                        item {
+                            Column(modifier = Modifier.padding(16.dp)) {
+                                if (isHardened) Text("🛡️ Hardened Engine Active", color = Color(0xFF4CAF50), style = MaterialTheme.typography.bodyMedium)
+                                if (isUnicodeFiltered) {
+                                    if (isHardened) Spacer(modifier = Modifier.height(8.dp))
+                                    Text("👻 Unicode Stealth Active", color = Color(0xFF4CAF50), style = MaterialTheme.typography.bodyMedium)
+                                }
+                            }
+                        }
+                    }
+                }
             }
             item(key = "features_header", contentType = "segmented") {
                 SegmentedColumn(
@@ -323,6 +344,9 @@ private fun SuSKstatTab(
 ) {
     val uiState = viewModel.uiState
     var editingStaticKstatEntry by remember { mutableStateOf<SuSFSStaticKstatEntry?>(null) }
+    var targetPath by remember { mutableStateOf("") }
+    var spoofPath by remember { mutableStateOf("") }
+    val context = LocalContext.current
     val kstatPathEditDialog = rememberPathEditDialog(AddPathTarget.KstatPath, viewModel)
     val kstatUpdatePathDialog = rememberPathEditDialog(AddPathTarget.KstatUpdate, viewModel)
     val kstatFullClonePathDialog = rememberPathEditDialog(AddPathTarget.KstatFullClone, viewModel)
@@ -385,6 +409,44 @@ private fun SuSKstatTab(
     ) {
         item {
             Spacer(modifier = Modifier.height(contentPadding.calculateTopPadding()))
+        }
+        item(key = "advanced_kstat_redirector", contentType = "segmented") {
+            SegmentedColumn(
+                title = "Advanced KStat Redirector"
+            ) {
+                item {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        OutlinedTextField(
+                            value = targetPath,
+                            onValueChange = { targetPath = it },
+                            label = { Text("Target Path (e.g., /data/adb)") },
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        OutlinedTextField(
+                            value = spoofPath,
+                            onValueChange = { spoofPath = it },
+                            label = { Text("Fake Path (e.g., /system/build.prop)") },
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Button(
+                            onClick = {
+                                val cmd = "susfs add_sus_kstat_redirect \"$targetPath\" \"$spoofPath\""
+                                val result = Shell.cmd(cmd).exec()
+                                if (result.isSuccess) {
+                                    Toast.makeText(context, "Ghost Redirect Active!", Toast.LENGTH_SHORT).show()
+                                } else {
+                                    Toast.makeText(context, "Redirect Failed - Check Kernel", Toast.LENGTH_SHORT).show()
+                                }
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text("Apply Ghost Redirect")
+                        }
+                    }
+                }
+            }
         }
         item {
             SegmentedColumn(
